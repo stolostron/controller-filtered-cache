@@ -428,6 +428,18 @@ func (efci *enhancedFilteredCacheInformer) AddEventHandlerWithResyncPeriod(handl
 	return handles, nil
 }
 
+func (efci *enhancedFilteredCacheInformer) AddEventHandlerWithOptions(handler toolscache.ResourceEventHandler, options toolscache.HandlerOptions) (toolscache.ResourceEventHandlerRegistration, error) {
+	handles := indexedHandlerRegistration{handles: make(map[int]toolscache.ResourceEventHandlerRegistration, len(efci.informers))}
+	for i, informer := range efci.informers {
+		registration, err := informer.AddEventHandlerWithOptions(handler, options)
+		if err != nil {
+			return nil, err
+		}
+		handles.handles[i] = registration
+	}
+	return handles, nil
+}
+
 // RemoveEventHandler removes a formerly added event handler given by its registration handle.
 func (efci *enhancedFilteredCacheInformer) RemoveEventHandler(h toolscache.ResourceEventHandlerRegistration) error {
 	handles, ok := h.(indexedHandlerRegistration)
