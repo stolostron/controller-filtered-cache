@@ -154,6 +154,18 @@ func (i *multiNamespaceInformer) AddEventHandlerWithResyncPeriod(handler toolsca
 	return handles, nil
 }
 
+func (i *multiNamespaceInformer) AddEventHandlerWithOptions(handler toolscache.ResourceEventHandler, options toolscache.HandlerOptions) (toolscache.ResourceEventHandlerRegistration, error) {
+	handles := handlerRegistration{handles: make(map[string]toolscache.ResourceEventHandlerRegistration, len(i.namespaceToInformer))}
+	for ns, informer := range i.namespaceToInformer {
+		registration, err := informer.AddEventHandlerWithOptions(handler, options)
+		if err != nil {
+			return nil, err
+		}
+		handles.handles[ns] = registration
+	}
+	return handles, nil
+}
+
 // RemoveEventHandler removes a formerly added event handler given by its registration handle.
 func (i *multiNamespaceInformer) RemoveEventHandler(h toolscache.ResourceEventHandlerRegistration) error {
 	handles, ok := h.(handlerRegistration)
