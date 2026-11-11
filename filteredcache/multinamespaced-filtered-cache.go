@@ -194,6 +194,16 @@ func (i *multiNamespaceInformer) HasSynced() bool {
 	return true
 }
 
+// HasSyncedChecker returns a DoneChecker that completes once every namespaced informer's checker
+// has completed. controller-runtime 0.24+ / client-go 0.36+ require this on cache.Informer.
+func (i *multiNamespaceInformer) HasSyncedChecker() toolscache.DoneChecker {
+	checkers := make([]toolscache.DoneChecker, 0, len(i.namespaceToInformer))
+	for _, informer := range i.namespaceToInformer {
+		checkers = append(checkers, informer.HasSyncedChecker())
+	}
+	return &combinedDoneChecker{name: "multiNamespaceInformer", checkers: checkers}
+}
+
 // AddIndexers adds the indexer for each namespaced informer
 func (i *multiNamespaceInformer) AddIndexers(indexers toolscache.Indexers) error {
 	for _, informer := range i.namespaceToInformer {

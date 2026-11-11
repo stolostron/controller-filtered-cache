@@ -402,6 +402,16 @@ func (h indexedHandlerRegistration) HasSynced() bool {
 	return true
 }
 
+// HasSyncedChecker returns a DoneChecker that completes once every underlying registration's
+// checker has completed. client-go 0.36+ requires this on ResourceEventHandlerRegistration.
+func (h indexedHandlerRegistration) HasSyncedChecker() toolscache.DoneChecker {
+	checkers := make([]toolscache.DoneChecker, 0, len(h.handles))
+	for _, reg := range h.handles {
+		checkers = append(checkers, reg.HasSyncedChecker())
+	}
+	return &combinedDoneChecker{name: "enhancedFilteredCacheHandlerRegistration", checkers: checkers}
+}
+
 // AddEventHandler adds the handler to each internal informer
 func (efci *enhancedFilteredCacheInformer) AddEventHandler(handler toolscache.ResourceEventHandler) (toolscache.ResourceEventHandlerRegistration, error) {
 	handles := indexedHandlerRegistration{handles: make(map[int]toolscache.ResourceEventHandlerRegistration, len(efci.informers))}
@@ -466,6 +476,16 @@ func (efci *enhancedFilteredCacheInformer) HasSynced() bool {
 		}
 	}
 	return true
+}
+
+// HasSyncedChecker returns a DoneChecker that completes once every internal informer's checker
+// has completed. controller-runtime 0.24+ / client-go 0.36+ require this on cache.Informer.
+func (efci *enhancedFilteredCacheInformer) HasSyncedChecker() toolscache.DoneChecker {
+	checkers := make([]toolscache.DoneChecker, 0, len(efci.informers))
+	for _, informer := range efci.informers {
+		checkers = append(checkers, informer.HasSyncedChecker())
+	}
+	return &combinedDoneChecker{name: "enhancedFilteredCacheInformer", checkers: checkers}
 }
 
 func (efci *enhancedFilteredCacheInformer) IsStopped() bool {

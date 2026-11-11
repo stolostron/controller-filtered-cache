@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gobuffalo/flect"
@@ -564,4 +565,44 @@ func (h handlerRegistration) HasSynced() bool {
 		}
 	}
 	return true
+}
+
+// HasSyncedChecker returns a DoneChecker that completes once every underlying registration's
+// checker has completed. client-go 0.36+ requires this on ResourceEventHandlerRegistration.
+func (h handlerRegistration) HasSyncedChecker() toolscache.DoneChecker {
+	checkers := make([]toolscache.DoneChecker, 0, len(h.handles))
+	for _, reg := range h.handles {
+		checkers = append(checkers, reg.HasSyncedChecker())
+	}
+	return &combinedDoneChecker{name: "filteredCacheHandlerRegistration", checkers: checkers}
+}
+
+// combinedDoneChecker aggregates multiple DoneCheckers into one that is Done only once all of
+// the underlying checkers are Done. It satisfies toolscache.DoneChecker, which client-go 0.36+
+// requires from ResourceEventHandlerRegistration and informers. Because this cache fans a single
+// logical GVK/namespace out across several informers, each handle/informer has its own checker
+// and this unions them.
+type combinedDoneChecker struct {
+	name     string
+	checkers []toolscache.DoneChecker
+	once     sync.Once
+	done     chan struct{}
+}
+
+// Name returns a string describing the entity being waited for.
+func (c *combinedDoneChecker) Name() string { return c.name }
+
+// Done returns a channel closed once all underlying checkers are Done. The aggregation is computed
+// once so repeated calls return the same channel and spawn at most one goroutine.
+func (c *combinedDoneChecker) Done() <-chan struct{} {
+	c.once.Do(func() {
+		c.done = make(chan struct{})
+		go func() {
+			for _, dc := range c.checkers {
+				<-dc.Done()
+			}
+			close(c.done)
+		}()
+	})
+	return c.done
 }
